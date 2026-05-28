@@ -1,2 +1,42 @@
-# Telegram-openrouter-bot
-🚀 A serverless Telegram AI bot deployed on Cloudflare Workers, integrated with OpenRouter. Features real-time free AI model discovery and individual user configuration using Cloudflare KV.
+# 🤖 ربات تلگرام متصل به OpenRouter (سرورلس روی Cloudflare Workers)
+
+یک ربات هوش مصنوعی سبک، سریع و کاملاً رایگان برای تلگرام که با معماری **Serverless** روی **Cloudflare Workers** اجرا می‌شود. این ربات به **OpenRouter API** متصل است و به کاربران چت اجازه می‌دهد تا به صورت زنده لیست تمام مدل‌های هوش مصنوعی رایگان (مثل Gemini، Llama، Mistral و...) را دریافت کرده و با یک کلیک مدل فعال خود را تغییر دهند.
+
+## ✨ قابلیت‌ها
+- ⚡ **کاملاً سرورلس (Serverless):** بدون نیاز به خرید سرور یا هاست، کاملاً اجرا شده روی بستر رایگان و پرسرعت کلودفلر.
+- 🔄 **لیست زنده و خودکار مدل‌ها:** دریافت آنلاین و لحظه‌ای تمام مدل‌های رایگان موجود در OpenRouter با دستور `/model` بدون نیاز به آپدیت دستی کد.
+- 💾 **حافظه اختصاصی برای هر کاربر:** ذخیره مدل انتخاب شده توسط هر کاربر به صورت مجزا در شبکه پایگاه‌داده کلودفلر (**Cloudflare KV**).
+- 📱 **منوی شیشه‌ای و کاربرپسند:** مجهز به دکمه‌های Inline تلگرام برای دسترسی سریع به منوها.
+- 🛡️ **امنیت بالا و ضد کرش:** استفاده از فرمت هوشمند HTML تلگرام جهت جلوگیری از اختلال کاراکترهای خاص (`Markdown` Errors).
+
+---
+
+## 🚀 راهنمای راه‌اندازی (Step-by-Step)
+
+### ۱. ساخت ربات تلگرام
+1. وارد تلگرام شده و به **BotFather@** پیام دهید.
+2. دستور `/newbot` را ارسال کرده و نام و یوزرنیم ربات خود را تعیین کنید.
+3. **API Token** ارائه شده را کپی کرده و در جایی امن نگه دارید.
+
+### ۲. دریافت کلید OpenRouter
+1. به سایت [OpenRouter](https://openrouter.ai/) بروید و یک اکانت بسازید.
+2. از منوی تنظیمات وارد بخش **API Keys** شده و یک کلید جدید بسازید (`sk-or-...`).
+
+### ۳. تنظیمات Cloudflare Workers
+1. وارد پنل [Cloudflare](https://dash.cloudflare.com/) شوید.
+2. از منوی سمت چپ به مسیر **Workers & Pages -> KV** بروید و روی **Create a Namespace** کلیک کنید. نام آن را مثلاً `KV_BOT` بگذارید.
+3. به بخش **Workers & Pages** برگردید و یک ورکر جدید بسازید (**Create Application -> Create Worker**).
+4. کد فایل `src/index.js` این مخزن را کپی کرده و در بخش **Quick Edit** ورکر خود جایگزین و ذخیره (`Save and Deploy`) کنید.
+
+### ۴. اتصال متغیرها و دیتابیس به ورکر
+در پنل ورکر ساخته شده، به تب **Settings** بروید:
+- **اتصال KV:** در بخش **Variables -> KV Namespace Bindings** روی دکمه افزودن کلیک کنید. نام متغیر (Variable name) را دقیقاً `KV_BOT` بگذارید و آن را به دیتابیسی که در مرحله قبل ساختید متصل کنید.
+- **تنظیم توکن‌ها:** در بخش **Variables -> Environment Variables** دو متغیر زیر را اضافه کنید:
+  - `TELEGRAM_BOT_TOKEN`: (توکن ربات تلگرام شما)
+  - `OPENROUTER_API_KEY`: (کلید API اوپن‌روتر شما)
+
+### ۵. ست کردن وبهوک تلگرام (Webhook)
+برای اینکه تلگرام پیام‌ها را به ورکر شما بفرستد، آدرس مرورگر زیر را باز کنید (آدرس ورکر خود و توکن ربات را در آن جایگزین کنید):
+
+```text
+[https://api.telegram.org/bot](https://api.telegram.org/bot)<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook?url=<YOUR_CLOUDFLARE_WORKER_URL>
