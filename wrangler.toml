@@ -1,0 +1,13 @@
+name = "telegram-openrouter-bot"
+main = "src/index.js"
+compatibility_date = "2026-05-28"
+
+# لایه حافظه KV برای ذخیره مدل فعال هر کاربر
+[[kv_namespaces]]
+binding = "KV_BOT"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# متغیرهای محیطی مورد نیاز ربات (مقادیر اصلی را در پنل کلودفلر ست کنید)
+[vars]
+TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+OPENROUTER_API_KEY = "YOUR_OPENROUTER_API_KEY"
