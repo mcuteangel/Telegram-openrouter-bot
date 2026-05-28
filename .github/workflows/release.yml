@@ -1,0 +1,33 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  assets:
+    name: Upload Release Assets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create Worker Copy
+        run: |
+          # کپی کردن فایل اصلی با نام جدید برای دانلود مستقیم کاربران
+          cp src/index.js ./worker.js
+
+      - name: Zip Source Code
+        run: |
+          # زیپ کردن سورس پروژه برای بخش ریلیز
+          zip -r source-code.zip src/ wrangler.toml README.md LICENSE
+
+      - name: Upload Assets to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            worker.js
+            source-code.zip
