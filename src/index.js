@@ -1,6 +1,15 @@
 const BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_MODEL = "google/gemini-2.5-flash"; 
 
+// تابع کمکی برای پچ کردن باگ کاراکترهای غیرمجاز در حالت HTML تلگرام
+function escapeHTML(str) {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== "POST") {
@@ -65,6 +74,9 @@ async function handleTelegramUpdate(body, env) {
         [
           { text: "🤖 لیست مدل‌های رایگان", callback_data: "menu_models" },
           { text: "⚙️ مدل فعال فعلی", callback_data: "menu_current" }
+        ],
+        [
+          { text: "🧹 پاک کردن حافظه", callback_data: "menu_clear" }
         ]
       ]
     };
@@ -82,6 +94,9 @@ async function handleTelegramUpdate(body, env) {
       } 
       else if (callbackData === "menu_current") {
         await showCurrentModel(chatId, messageId, env, sendMessage);
+      }
+      else if (callbackData === "menu_clear") {
+        await clearMemory(chatId, env, sendMessage);
       }
       return;
     }
@@ -104,6 +119,11 @@ async function handleTelegramUpdate(body, env) {
       return;
     }
 
+    if (userText.startsWith("/clear")) {
+      await clearMemory(chatId, env, sendMessage);
+      return;
+    }
+
     if (userText.includes(":free")) {
       const cleanModelInput = userText.trim();
       if (env.KV_BOT) await env.KV_BOT.put(`user_model_${chatId}`, cleanModelInput);
@@ -112,43 +132,68 @@ async function handleTelegramUpdate(body, env) {
     }
 
     await sendTyping(chatId);
-    let currentModel = DEFAULT_MODEL;
-    if (env.KV_BOT) {
-      const savedModel = await env.KV_BOT.get(`user_model_${chatId}`);
-      if (savedModel) currentModel = savedModel;
+
+    // ۱. خواندن مدل انتخابی کاربر یا استفاده از مدل پیش‌فرض
+    const userModel = await env.KV_BOT.get(`user_model_${chatId}`) || DEFAULT_MODEL;
+
+    // ۲. خواندن تاریخچه چت از KV
+    const contextKey = `user_context_${chatId}`;
+    let chatContext = [];
+    const savedContext = await env.KV_BOT.get(contextKey);
+
+    if (savedContext) {
+      try {
+        chatContext = JSON.parse(savedContext);
+      } catch (e) {
+        chatContext = [];
+      }
     }
 
-    const aiResponse = await fetch(`${BASE_URL}/chat/completions`, {
+    // ۳. اضافه کردن پیام جدید کاربر به تاریخچه
+    chatContext.push({ role: "user", content: userText });
+
+    // محدود کردن تاریخچه به ۱۰ پیام اخیر برای کنترل ریسپانس و توکن
+    if (chatContext.length > 10) {
+      chatContext = chatContext.slice(-10);
+    }
+
+    // ۴. ارسال درخواست به OpenRouter به همراه کل تاریخچه (messages)
+    const openRouterResponse = await fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "https://github.com/cloudflare/workers-sdk",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/mcuteangel/Telegram-openrouter-bot",
         "X-Title": "Telegram AI Bot"
       },
       body: JSON.stringify({
-        model: currentModel,
-        max_tokens: 500,
-        messages: [
-          { role: "system", content: `You are a helpful AI assistant in a Telegram chat. Give short, direct answers. The user's name is ${firstName}.` },
-          { role: "user", content: userText }
-        ]
+        model: userModel,
+        messages: chatContext
       })
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      throw new Error(`OpenRouter (${currentModel}) Error: ${aiResponse.status}. Details: ${errorText}`);
+    if (!openRouterResponse.ok) {
+      const errorText = await openRouterResponse.text();
+      throw new Error(`OpenRouter (${userModel}) Error: ${openRouterResponse.status}. Details: ${errorText}`);
     }
 
-    const aiData = await aiResponse.json();
-    const replyText = aiData.choices?.[0]?.message?.content || "پاسخی دریافت نشد.";
-    await sendMessage(chatId, replyText, messageId, null);
+    const aiData = await openRouterResponse.json();
+    const aiReply = aiData.choices?.[0]?.message?.content || "خطا در دریافت پاسخ از هوش مصنوعی.";
+
+    // ۵. اضافه کردن پاسخ هوش مصنوعی به تاریخچه و ذخیره مجدد در KV
+    chatContext.push({ role: "assistant", content: aiReply });
+    if (chatContext.length > 10) {
+      chatContext = chatContext.slice(-10);
+    }
+    await env.KV_BOT.put(contextKey, JSON.stringify(chatContext));
+
+    // ۶. ارسال پاسخ نهایی به کاربر در تلگرام با اسکیپ کردن تگ‌های مخرب هوش مصنوعی
+    await sendMessage(chatId, escapeHTML(aiReply), messageId, "HTML");
 
   } catch (error) {
     console.error("Process Error:", error.message);
     try {
-      await sendMessage(chatId, `⚠️ خطا در پردازش:\n${error.message}`, null, "HTML");
+      await sendMessage(chatId, `⚠️ خطا در پردازش:\n<code>${escapeHTML(error.message)}</code>`, null, "HTML");
     } catch (e) {}
   }
 }
@@ -187,4 +232,11 @@ async function listModels(chatId, sendMessage) {
     messageText += `🔹 <b>${cleanName}</b>\n<code>${model.id}</code>\n\n`;
   });
   await sendMessage(chatId, messageText, null, "HTML");
+}
+
+async function clearMemory(chatId, env, sendMessage) {
+  if (env.KV_BOT) {
+    await env.KV_BOT.delete(`user_context_${chatId}`);
+  }
+  await sendMessage(chatId, "🧹 <b>تاریخچه چت شما با موفقیت پاک شد!</b>\n\nمدل انتخابی شما حفظ شده است.", null, "HTML");
 }
