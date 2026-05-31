@@ -20,14 +20,8 @@ jobs:
           # کپی کردن فایل اصلی با نام جدید برای دانلود مستقیم کاربران
           cp src/index.js ./worker.js
 
-      - name: Zip Source Code
-        run: |
-          # زیپ کردن سورس پروژه برای بخش ریلیز
-          zip -r source-code.zip src/ wrangler.toml README.md LICENSE
-
       - name: Upload Assets to Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             worker.js
-            source-code.zip
